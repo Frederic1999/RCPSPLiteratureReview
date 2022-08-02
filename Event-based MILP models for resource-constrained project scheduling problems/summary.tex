@@ -1,0 +1,290 @@
+\documentclass{paper}
+
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{listings}
+%\usepackage{ulem}
+\usepackage{csquotes}
+\usepackage{siunitx}
+\DeclareSIUnit\knot{kn}
+\DeclareSIUnit\NM{NM}
+\DeclareSIUnit\foot{ft}
+\DeclareSIUnit\ftm{\foot\per\minute}
+\usepackage[autolanguage]{numprint}
+\definecolor{customcolor}{rgb}{1,0.5,0}
+\usepackage{geometry}
+\geometry{a4paper,left=20mm, top=25mm, right=20mm}
+\usepackage{float}
+\usepackage{amssymb}
+\usepackage{cleveref}
+\newtheorem{definition}{Definition}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{mathtools}
+
+\newcommand{\todo}[1]{{\color{red}{#1}}}
+\def\intv#1[#2..#3]{\mathopen{#1[}#2 \mathrel{\mathinner {\ldotp \ldotp}}\nobreak #3\mathclose{#1]}}
+
+\ExplSyntaxOn
+\NewDocumentCommand \hms { o > { \SplitArgument { 2 } { ; } } m }
+{
+	\group_begin:
+	\IfNoValueF {#1}
+	{ \keys_set:nn { siunitx } {#1} }
+	\siunitx_hms_output:nnn #2
+	\group_end:
+}
+\cs_new_protected:Npn \siunitx_hms_output:nnn #1#2#3
+{
+	\IfNoValueF {#1}
+	{
+		\tl_if_blank:nF {#1}
+		{
+			\SI {#1} { \hour }
+			\IfNoValueF {#2} { ~ }
+		}
+	}
+	\IfNoValueF {#2}
+	{
+		\tl_if_blank:nF {#2}
+		{
+			\SI {#2} { \minute }
+			\IfNoValueF {#3} { ~ }
+		}
+	}
+	\IfNoValueF {#3}
+	{ \tl_if_blank:nF {#3} { \SI {#3} { \second } } }
+}
+\ExplSyntaxOff
+
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+
+
+\begin{document}
+	
+	\title{Event-based MILP models for resource-constrained project scheduling problems}
+	
+	\maketitle
+	
+	\section*{Problem Description}
+	
+	\textbf{Resource-constrained project scheduling problem(RCPSP): NP-hard problem}
+	\\A project involves activities, and resources (renewable or non-renewable), generally available in limited quantities. 
+	The processing of an activity requires throughout its duration, one or more units of one or more resources. 
+	The RCPSP deals with organizing in time the realization of activities, taking into account a number of precedence constraints, and constraints on the use and availability of the resources needed. 
+	A schedule is a solution that describes resource allocation over time, and aims at satisfying one or more objectives.
+	\begin{itemize}
+		\item A combinatorial optimization problem defined by a tuple $(V,p,E,R,B,b)$
+		\\$V$: activities, $p$:vector of durations, $E$: precedence relations,
+		\\$R$: resources, $B$: vector of resource availabilities, $b$: matrix of demands
+		\item  Activities constituting the project are identified by a set $\{0,\dots,n+1\}$.
+		Activity $0$ represents by convention the start of the schedule, and activity $n + 1$ represents symmetrically the end of the schedule. 
+		The set of non-dummy activities is identified by $\mathbf{A}=\{1,\dots,n\}$.
+		\item $p\in N^{n+2}$, $p_i$ is the duration of activity $A_i$, with the special values: $p_0 = p_{n+1} = 0$
+		\item $(i, j)\in E$ means that activity $i$ must precede activity $j$
+		\item $B\in N^m$, $B_k$ is the availability of resource $k$, $m$ is the number of available resources
+		\item b is an $(n+2)\times m$ integer matrix, $b_{ik}$ represents the amount of resource $k$ used per time period during the execution of activity $i$,
+		$b_{0k} = 0$ , $b_{n+1,k} = 0$, for all $k \in R$.
+		\item Schedule $S\in N^{n+2}$, $S_i$ represents the start time of activity $i$, $S_0=0$, $\mathbf{H}=\{1,\dots,T\}$ is the scheduling horizon, 
+		and $T$ (the length of the scheduling horizon) is some upper bound for the makespan.
+	\end{itemize} 
+	
+	\section{Basic Discrete-Time Formulation (DT)}
+	   \subsection{Decision Variables}
+	      \begin{itemize}
+		     \item $x_{it}=1$ if activity $i$ starts at time $t$, $x_{it}=0$ otherwise
+	      \end{itemize}
+	   \subsection{Objective Function}
+	      \begin{itemize}
+		     \item $\min\sum _{t\in H}tx_{n+1,t}$ 
+	      \end{itemize}
+	   \subsection{Constraints}
+	      \begin{itemize}
+		     \item Precedence:
+		    \begin{equation}
+			 \forall (i,j) \in E, \quad \sum _{t\in H}tx_{jt}\geq \sum _{t\in H}tx_{it}+p_i
+			\end{equation}
+			\item Resource:
+			\begin{equation}
+			\forall t \in H, \forall k \in R, \quad \sum _{i=1}^{n}b_{ik}\sum _{\tau =t-p_i+1}^{t}x_{i\tau }\leq B_k
+		    \end{equation}
+			\item Non-preemptive:
+			\begin{equation}
+			\forall i \in A\cup \{0,n+1\}, \quad \sum _{t\in H}x_{it}=1
+		    \end{equation}
+		  \end{itemize}
+	   \subsection{Problem Size}
+	      \begin{itemize}
+            \item Binary Variables: $(n+2)(T+1)$ 
+			\item Constraints: $\left\lvert E \right\rvert + (T+1)m+n+2$ 
+		  \end{itemize}
+	
+	\section{Disaggregated discrete-time formulation (DDT)}
+	  \begin{itemize}
+		\item The only diffference between DT and DDT is how they formulate the precedence constraints.
+		\begin{equation}
+			\forall t \in H, \forall (i,j) \in E, \quad \sum_{\tau =t}^{T} x_{i\tau}+\sum_{\tau =0}^{t+p_i-1} x_{j\tau}\leq 1
+		\end{equation}
+	  \end{itemize}
+	  \begin{itemize}
+		\item Problem Size
+		\begin{itemize}
+		  \item Binary Variables: $(n+2)(T+1)$ 
+		  \item Constraints: $(m+\left\lvert E \right\rvert)(T+1)+n+2$ 
+		\end{itemize}
+	  \end{itemize}
+
+	\section{Flow-based continuous-time formulation (FCT)}
+	\subsection{Decision Variables}
+	\begin{itemize}
+	\item Starting-time continuous variables $S_i$, for each activity $i$
+	\item Sequential variables $x_{ij}$ which are binary and indicate whether activity $i$ is processed before activity $j$
+	\item Continuous flow variables $f_{ijk}$ to denote the quantity of resource $k$ that is transferred 
+	from activity $i$ (at the end of its processing) to activity $j$ (at the start of its processing)
+	\end{itemize}
+	\subsection{Objective Function}
+	\begin{itemize}
+	  \item $\min S_{n+1}$
+	\end{itemize}
+	\subsection{Constraints}
+	\begin{itemize}
+		\item Precedence:
+	   \begin{equation}
+		\forall (i,j) \in (A\cup \{0,n+1\})^2, i\textless j, \quad x_{ij}+x{ji}\leq 1 
+	   \end{equation}
+	   \begin{equation}
+		\forall (i,j,k) \in (A\cup \{0,n+1\})^3, \quad x_{ik}\geq x_{ij}+x_{jk}-1 
+	   \end{equation}
+	   \begin{equation}
+		\forall (i,j) \in (A\cup \{0,n+1\})^2, \quad S_j-S_i\geq -M+(P_i+M)x_{ij} 
+	   \end{equation}
+	   \\Constraints (5) state that for two distinct activities, either $i$ precedes $j$, or $j$ precedes $i$, or $i$ and $j$ are processed in parallel. 
+	   Constraints (6) express the transitivity of the precedence relations.
+	   $M$ is some large enough constant. $M$ can be set to any valid upper bound of the makespan(e.g. $M=\sum_{i = 1}^{n}p_i$).
+	   \item Resource:
+	   \begin{equation}
+	   \forall (i,j) \in (A\cup \{0\}\times A\cup \{n+1\}),\forall k \in R, \quad f_{ijk}\leq \min(b_{ik},b_{jk})x_{ij}
+	   \end{equation}
+	   \begin{equation}
+         \forall j \in A\cup \{0,n+1\}, \forall k \in R, \quad \sum_{j\in A\cup \{0,n+1\}} f_{ijk}=\overline{b_{ik}} 
+	   \end{equation}
+	   \begin{equation}
+		\forall i \in A\cup \{0,n+1\}, \forall k \in R, \quad \sum_{i\in A\cup \{0,n+1\}} f_{ijk}=\overline{b_{jk}} 
+	   \end{equation}
+	   \begin{equation}
+		\forall k \in R, \quad f_{(n+1)0k}=B_k
+	   \end{equation}
+	   \\Constraint (8) indicates that if $i$ precedes $j$, the maximum flow sent from $i$ to $j$ is set to $\min \{b_i,b_j\}$ while if $i$ does not precede $j$ the flow must be zero. 
+	   Constraints (9) and (10) are resource flow conservation constraints. 
+	   Constraint (11) ensures the conservation of the flow.
+	\end{itemize}
+	
+	\subsection{Problem Size}
+	\begin{itemize}
+		\item Binary Variables: $(n+2)^2$
+		\item Continous Variables: $m(n+2)^2+n+2$ 
+		\item Constraints: $n^3+(m+\frac{15}{2})n^2+(4m+\frac{35}{2})n+5m+13$ 
+	  \end{itemize}
+	\section{Start/End Event-based formulation (SEE)}
+	An event occurs when an activity starts or ends.
+	$\varepsilon = \{0,1,\dots,n\}$ is the index set of the events.
+
+	\subsection{Decision Variables}
+	\begin{itemize}
+	\item $x_{ie} = 1$ if activity $i$ starts at event $e$.
+	\item $y_{ie} = 1$ if activity $i$ ends at event $e$.
+	\item Continous variable $t_e$ represents the date of event $e$
+	\item Continous variable $r_ek$ represents the quantity of resource k required immediately after event $e$
+	\end{itemize}
+
+	\subsection{Objective Function}
+	\begin{itemize}
+	\item $\min t_n$	
+	\end{itemize}
+	
+	\subsection{Constraints}
+	
+	\begin{itemize}
+	\item Activity i starts at event $e$ and ends at event $f$, then $t_f \geq t_e+p_i$: 
+	\begin{equation}
+		\forall (e,f) \in \varepsilon ^2, f\textgreater e, \forall i \in A, \quad t_f \geq t_e + p_ix_{ie}-p_i(1-y_{if})
+	\end{equation}
+	\item A start event (respectively end event) has a single occurrence: 
+	\begin{equation}
+		\forall i \in A, \quad \sum_{e\in \varepsilon}x_{ie}=1, \sum_{e\in \varepsilon}y_{ie}=1
+	\end{equation}
+	\item The precedence relation between activities: If $i \textless j$ then $i$ ends at event $e$ or after, $j$ cannot start before event $e$.
+	\begin{equation}
+		\forall (i,j) \in E, \forall e \in \varepsilon ,\quad \sum_{e'= e}^{n}y_{ie'}+\sum_{e'= 0}^{e-1}x_{je'} \leq 1
+	\end{equation}
+	\item Resource conservation constraints that imply that for each resource $k$, its consumption immediately after event $e$ is equal to its consumption immediately
+	after the previous event $e-1$, plus the consumption required by the activities that start at event $e$, minus the consumption required by the activities that end at event $e$.
+	\begin{equation}
+		\forall e \in \varepsilon, e\geq 1, \forall k\in R,\quad r_{ek}=r_{(e-1)k}+\sum_{i \in A}b_{ik}x_{ie}-\sum_{i \in A}b_{ik}y_{ie} 
+	\end{equation}
+	\item Limit the consumption of resources at each event to the availability of resources:
+	\begin{equation}
+		\forall e \in \varepsilon,\forall k \in R \quad r_{ek} \leq B_k
+	\end{equation}
+	\end{itemize}
+
+	\subsection{Problem Size}
+	\begin{itemize}
+		\item Binary Variables: $2n(n+1)$
+		\item Continous Variables: $n+1$ 
+		\item Constraints: $\frac{1}{2}n^3+n^2+(3+\left\lvert E \right\rvert+m)n+\left\lvert E \right\rvert+m+1$ 
+	  \end{itemize}
+	
+	\section{On/Off Event-based formulation (OOE)}
+    \subsection{Decision Variables}
+	\begin{itemize}
+		\item $z_{ie} = 1$ if activity $i$ starts at event $e$ or if it still being processed immediately after event $e$.
+		Thus, $z_{ie}$ remains equal to $1$ for the duration of the process activity $i$.
+		\item Continous variable $t_e$ represents the date of event $e$
+	\end{itemize}
+
+	\subsection{Objective Function}
+	\begin{itemize}
+	\item $\min C_max$ , $C_{max}$ is the makespan.
+	\end{itemize}
+
+	\subsection{Constraints}
+	\begin{itemize}
+	  \item $C_{max} \geq t_e + p_i$ if $i$ is in process at event $e-1$ but not at event $e$
+	\begin{equation}
+	  \forall e \in \varepsilon,\forall i \in A \quad C_{max} \geq t_e + (z_{ie}-z_{i(e-1)})p_i
+	\end{equation}
+	\item Link the binary optimization variables $z_{ie}$ to the continuous optimization variables $t_e$, 
+	and ensures that the processing time of an activity is equal to the processing time of this activity.
+	\begin{equation}
+		\forall (e,f,i) \in \varepsilon^2\times A,f \textgreater e\neq 0,\quad t_f\geq t_e+ ((z_{ie}-z_{i(e-1)})-(z_{if}-z_{i(f-1)})-1)p_i
+	\end{equation}
+	\item Ensure the adjacency of the events during which an activity being processed:
+	\begin{equation}
+		\forall e\neq 0 \in \varepsilon ,\quad \sum_{e'=0}^{e-1}z_{ie'}\geq e(1-(z_{ie}-z_{i(e-1)}))  
+	\end{equation}	
+	\begin{equation}
+	    \forall e\neq 0 \in \varepsilon ,\quad \sum_{e'=e}^{n-1}z_{ie'}\geq e(1+(z_{ie}-z_{i(e-1)})) 
+	\end{equation}	
+	\item Each activity is processed at least once during the project:
+	\begin{equation}
+		\forall i \in A, \quad \sum_{e\in \varepsilon }z_{ie}\geq 1
+	\end{equation}
+	\item Precedence:
+	\begin{equation}
+		\forall e\in \varepsilon ,\forall (i,j)\in E,\quad z_{ie}+\sum_{e'=0}^{e}z_{je'}\leq 1+(1-z_{ie})e  
+	\end{equation}
+	\item Resource:
+	\begin{equation}
+		\forall e \in \varepsilon,\forall k \in R, \quad \sum_{i=0}^{n-1}b_{ik}z_{ie}\leq B_k 
+	\end{equation}
+	\end{itemize}
+
+	\subsection{Problem Size}
+	\begin{itemize}
+		\item Binary Variables: $n^2$
+		\item Continous Variables: $n+1$ 
+		\item Constraints: $\frac{1}{2}n^3-\frac{1}{2}n^2+(3+\left\lvert E \right\rvert+m)n-2$ 
+	\end{itemize}
+	
+\end{document}
